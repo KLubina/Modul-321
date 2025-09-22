@@ -1,0 +1,121 @@
+version: '3'
+
+services:
+  broker:
+    build: ./broker
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - mqtt-data:/mosquitto/data
+      - mqtt-log:/mosquitto/log
+    restart: unless-stopped
+    networks:
+      - mqtt-network
+
+  publisher:
+    build: ./publisher
+    depends_on:
+      - broker
+    environment:
+      - MQTT_BROKER_HOST=broker
+      - MQTT_BROKER_PORT=1883
+      - MQTT_TOPIC=test/message
+    restart: unless-stopped
+    networks:
+      - mqtt-network
+
+  temperature-sensor:
+    build: ./sensors/temperature
+    depends_on:
+      - broker
+    environment:
+      - MQTT_BROKER_HOST=broker
+      - MQTT_BROKER_PORT=1883
+      - MQTT_TOPIC=sensors/temperature
+      - SENSOR_ID=temp001
+    restart: unless-stopped
+    networks:
+      - mqtt-network
+
+  temperature-sensor-2:
+    build: ./sensors/temperature
+    depends_on:
+      - broker
+    environment:
+      - MQTT_BROKER_HOST=broker
+      - MQTT_BROKER_PORT=1883
+      - MQTT_TOPIC=sensors/temperature
+      - SENSOR_ID=temp002
+    restart: unless-stopped
+    networks:
+      - mqtt-network
+
+  humidity-sensor:
+    build: ./sensors/humidity
+    depends_on:
+      - broker
+    environment:
+      - MQTT_BROKER_HOST=broker
+      - MQTT_BROKER_PORT=1883
+      - MQTT_TOPIC=sensors/humidity
+      - SENSOR_ID=hum001
+    restart: unless-stopped
+    networks:
+      - mqtt-network
+
+  # Visualisierung mit Grafana und InfluxDB
+  influxdb:
+    image: influxdb:1.8
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb-data:/var/lib/influxdb
+    environment:
+      - INFLUXDB_DB=mqtt
+      - INFLUXDB_ADMIN_USER=admin
+      - INFLUXDB_ADMIN_PASSWORD=adminpassword
+    restart: unless-stopped
+    networks:
+      - mqtt-network
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    depends_on:
+      - influxdb
+    volumes:
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=adminpassword
+    restart: unless-stopped
+    networks:
+      - mqtt-network
+
+  influxdb-connector:
+    build: ./influxdb-connector
+    depends_on:
+      - broker
+      - influxdb
+    environment:
+      - MQTT_BROKER_HOST=broker
+      - MQTT_BROKER_PORT=1883
+      - INFLUXDB_HOST=influxdb
+      - INFLUXDB_PORT=8086
+      - INFLUXDB_DATABASE=mqtt
+      - INFLUXDB_USER=admin
+      - INFLUXDB_PASSWORD=adminpassword
+    restart: unless-stopped
+    networks:
+      - mqtt-network
+
+networks:
+  mqtt-network:
+
+volumes:
+  mqtt-data:
+  mqtt-log:
+  influxdb-data:
+  grafana-data:
